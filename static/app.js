@@ -7,13 +7,21 @@ let modoRanking = 'tarefas';
 let chartBarras = null;
 let chartRosca = null;
 
+function formatarNumero(n) {
+  return n.toLocaleString('pt-BR');
+}
+
 function ehAtraso(status) {
   return String(status).toLowerCase().includes('atraso');
 }
 
 function ehPrazo(status) {
   const s = String(status).toLowerCase();
-  return s.includes('prazo') || (s.includes('baixad') && !s.includes('atraso'));
+  return s.includes('prazo') && !s.includes('atraso');
+}
+
+function ehAntecipada(status) {
+  return String(status).toLowerCase().includes('antecipa');
 }
 
 function dadosFiltrados() {
@@ -25,17 +33,21 @@ function dadosFiltrados() {
 }
 
 function atualizarCards() {
-  const dados = dadosFiltrados();
-  const total  = dados.length;
-  const prazo  = dados.filter(d => ehPrazo(d['Status'])).length;
-  const atraso = dados.filter(d => ehAtraso(d['Status'])).length;
+  const dados      = dadosFiltrados();
+  const total      = dados.length;
+  const prazo      = dados.filter(d => ehPrazo(d['Status'])).length;
+  const atraso     = dados.filter(d => ehAtraso(d['Status'])).length;
+  const antecipada = dados.filter(d => ehAntecipada(d['Status'])).length;
 
-  document.getElementById('card-total').textContent  = total;
-  document.getElementById('card-prazo').textContent  = prazo;
-  document.getElementById('card-atraso').textContent = atraso;
+  document.getElementById('card-total').textContent      = formatarNumero(total);
+  document.getElementById('card-prazo').textContent      = formatarNumero(prazo);
+  document.getElementById('card-atraso').textContent     = formatarNumero(atraso);
+  document.getElementById('card-antecipada').textContent = formatarNumero(antecipada);
 
-  document.getElementById('pct-prazo').textContent  = total ? `${Math.round((prazo  / total) * 100)}% do total` : '';
-  document.getElementById('pct-atraso').textContent = total ? `${Math.round((atraso / total) * 100)}% do total` : '';
+  const pct = (n) => total ? `${Math.round((n / total) * 100)}% do total` : '';
+  document.getElementById('pct-prazo').textContent      = pct(prazo);
+  document.getElementById('pct-atraso').textContent     = pct(atraso);
+  document.getElementById('pct-antecipada').textContent = pct(antecipada);
 }
 
 function atualizarGraficoBarras() {
@@ -44,14 +56,16 @@ function atualizarGraficoBarras() {
   const classMap = {};
   dados.forEach(d => {
     const cl = String(d['Classificacao'] || 'Sem classificação').trim();
-    if (!classMap[cl]) classMap[cl] = { prazo: 0, atraso: 0 };
-    if (ehAtraso(d['Status']))     classMap[cl].atraso++;
-    else if (ehPrazo(d['Status'])) classMap[cl].prazo++;
+    if (!classMap[cl]) classMap[cl] = { prazo: 0, atraso: 0, antecipada: 0 };
+    if (ehAtraso(d['Status']))         classMap[cl].atraso++;
+    else if (ehPrazo(d['Status']))     classMap[cl].prazo++;
+    else if (ehAntecipada(d['Status'])) classMap[cl].antecipada++;
   });
 
-  const labels   = Object.keys(classMap);
-  const prazoD   = labels.map(l => classMap[l].prazo);
-  const atrasoD  = labels.map(l => classMap[l].atraso);
+  const labels       = Object.keys(classMap);
+  const prazoD       = labels.map(l => classMap[l].prazo);
+  const atrasoD      = labels.map(l => classMap[l].atraso);
+  const antecipadaD  = labels.map(l => classMap[l].antecipada);
 
   if (chartBarras) chartBarras.destroy();
 
@@ -64,14 +78,21 @@ function atualizarGraficoBarras() {
         {
           label: 'No Prazo',
           data: prazoD,
-          backgroundColor: '#8B0000',
+          backgroundColor: '#C00000',
           borderRadius: { topLeft: 4, topRight: 4 },
           stack: 'stack',
         },
         {
           label: 'Em Atraso',
           data: atrasoD,
-          backgroundColor: '#C00000',
+          backgroundColor: '#D94F4F',
+          borderRadius: { topLeft: 4, topRight: 4 },
+          stack: 'stack',
+        },
+        {
+          label: 'Antecipada',
+          data: antecipadaD,
+          backgroundColor: '#EDAAAA',
           borderRadius: { topLeft: 4, topRight: 4 },
           stack: 'stack',
         }
@@ -83,13 +104,13 @@ function atualizarGraficoBarras() {
       plugins: {
         legend: {
           position: 'top',
-          labels: { font: { size: 12 }, color: '#000' }
+          labels: { font: { size: 12 }, color: '#444' }
         },
         tooltip: {
           callbacks: {
             footer(items) {
-              const idx = items[0].dataIndex;
-              const total = prazoD[idx] + atrasoD[idx];
+              const idx   = items[0].dataIndex;
+              const total = prazoD[idx] + atrasoD[idx] + antecipadaD[idx];
               return `Total: ${total}`;
             }
           }
@@ -98,14 +119,14 @@ function atualizarGraficoBarras() {
       scales: {
         x: {
           stacked: true,
-          ticks: { color: '#000', font: { size: 12 } },
+          ticks: { color: '#555', font: { size: 12 } },
           grid: { display: false }
         },
         y: {
           stacked: true,
           beginAtZero: true,
-          ticks: { color: '#000', stepSize: 1 },
-          grid: { color: '#f0e8e8' }
+          ticks: { color: '#555' },
+          grid: { color: '#eeeeee' }
         }
       }
     }
@@ -113,9 +134,11 @@ function atualizarGraficoBarras() {
 }
 
 function atualizarGraficoRosca() {
-  const dados = dadosFiltrados();
-  const prazo  = dados.filter(d => ehPrazo(d['Status'])).length;
-  const atraso = dados.filter(d => ehAtraso(d['Status'])).length;
+  const dados      = dadosFiltrados();
+  const prazo      = dados.filter(d => ehPrazo(d['Status'])).length;
+  const atraso     = dados.filter(d => ehAtraso(d['Status'])).length;
+  const antecipada = dados.filter(d => ehAntecipada(d['Status'])).length;
+  const total      = prazo + atraso + antecipada;
 
   if (chartRosca) chartRosca.destroy();
 
@@ -123,11 +146,11 @@ function atualizarGraficoRosca() {
   chartRosca = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['No Prazo', 'Em Atraso'],
+      labels: ['No Prazo', 'Em Atraso', 'Antecipada'],
       datasets: [{
-        data: [prazo, atraso],
-        backgroundColor: ['#8B0000', '#C00000'],
-        hoverBackgroundColor: ['#6B0000', '#A00000'],
+        data: [prazo, atraso, antecipada],
+        backgroundColor: ['#C00000', '#D94F4F', '#EDAAAA'],
+        hoverBackgroundColor: ['#A00000', '#C03030', '#D08080'],
         borderWidth: 0,
       }]
     },
@@ -138,13 +161,12 @@ function atualizarGraficoRosca() {
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { font: { size: 12 }, color: '#000', padding: 16 }
+          labels: { font: { size: 12 }, color: '#444', padding: 16 }
         },
         tooltip: {
           callbacks: {
             label(item) {
-              const total = prazo + atraso;
-              const pct   = total ? Math.round((item.raw / total) * 100) : 0;
+              const pct = total ? Math.round((item.raw / total) * 100) : 0;
               return ` ${item.raw} tarefas (${pct}%)`;
             }
           }
@@ -157,15 +179,14 @@ function atualizarGraficoRosca() {
         const { ctx: c, chartArea: { left, right, top, bottom } } = chart;
         const cx = (left + right) / 2;
         const cy = (top + bottom) / 2;
-        const total = prazo + atraso;
         c.save();
         c.font = 'bold 24px Segoe UI';
-        c.fillStyle = '#000';
+        c.fillStyle = '#222';
         c.textAlign = 'center';
         c.textBaseline = 'middle';
         c.fillText(total, cx, cy - 10);
         c.font = '12px Segoe UI';
-        c.fillStyle = '#888';
+        c.fillStyle = '#999';
         c.fillText('tarefas', cx, cy + 12);
         c.restore();
       }
